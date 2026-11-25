@@ -1,0 +1,11 @@
+{
+  "provider": "sentence-transformers",
+  "model": "sentence-transformers/all-MiniLM-L6-v2",
+  "fell_back_to_tfidf": false,
+  "dimension": 384,
+  "chunk_count": 321,
+  "projects": [
+    "chaligula",
+    "parabank"
+  ]
+}

@@ -1,0 +1,24 @@
+# QA Knowledge Platform - Streamlit Cloud requirements.
+#
+# This file replaces the original requirements.txt in the Streamlit
+# copy only; the FastAPI version keeps its own (see Dockerfile for the
+# Docker route). Streamlit Cloud installs this file, then runs
+# streamlit_app.py.
+#
+# CPU-only torch: the --extra-index-url line adds the PyTorch CPU
+# wheel index, and the torch==2.15.0+cpu pin can only be satisfied
+# from there, so the build never pulls the multi-GB CUDA wheel that
+# plain PyPI torch would bring. Version pins match the environment
+# this copy was verified in (torch 2.15.0+cpu, sentence-transformers
+# 6.3.0, streamlit 1.67.0, numpy 2.5.5, openpyxl 3.1.5).
+#
+# fastapi/uvicorn are not listed: the Streamlit entry point does not
+# import them. src/app.py stays in the repo for the local FastAPI
+# route but is not run by Streamlit Cloud. pytest is a local-only dev
+# tool and is not needed by the hosted app either.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.15.0+cpu
+streamlit==1.67.0
+sentence-transformers==6.3.0
+numpy==2.5.5
+openpyxl==3.1.5

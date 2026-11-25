@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QA Knowledge Platform</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; background: #f4f5f7; color: #1c2330; }
+  header { background: #17365D; color: #fff; padding: 14px 20px; }
+  header h1 { margin: 0; font-size: 19px; font-weight: 600; }
+  header p { margin: 3px 0 0; font-size: 12.5px; color: #c3cee0; }
+  main { max-width: 860px; margin: 0 auto; padding: 16px; }
+  #chat { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+  .msg { padding: 11px 14px; border-radius: 10px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; font-size: 14.5px; }
+  .msg.user { background: #dbe7f7; align-self: flex-end; max-width: 85%; }
+  .msg.bot { background: #fff; border: 1px solid #dde1e8; align-self: flex-start; max-width: 92%; }
+  .msg.notfound { background: #fdf3e3; border: 1px solid #ecd9ae; }
+  .sources { margin-top: 9px; padding-top: 8px; border-top: 1px solid #e6e9ef; font-size: 12.5px; color: #44506a; }
+  .sources b { color: #2b3560; }
+  .sources ul { margin: 4px 0 0; padding-left: 18px; }
+  .citecheck { margin-top: 6px; font-size: 12px; color: #5b7a5b; }
+  form#askbar { display: flex; gap: 8px; }
+  form#askbar select, form#askbar input[type="text"] { padding: 10px; border: 1px solid #c6ccd6; border-radius: 8px; font-size: 14px; }
+  form#askbar input[type="text"] { flex: 1; }
+  button { background: #1F4E78; color: #fff; border: none; padding: 10px 18px; border-radius: 8px; font-size: 14px; cursor: pointer; }
+  button:disabled { background: #93a5bd; cursor: wait; }
+  details#settings { margin-top: 22px; background: #fff; border: 1px solid #dde1e8; border-radius: 10px; padding: 12px 16px; }
+  details#settings summary { cursor: pointer; font-weight: 600; font-size: 14.5px; }
+  .srow { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+  .srow label { font-size: 12.5px; color: #44506a; }
+  .srow input, .srow select { padding: 8px; border: 1px solid #c6ccd6; border-radius: 6px; font-size: 13.5px; }
+  #settings-status { font-size: 12.5px; color: #44506a; margin-top: 10px; }
+  footer { max-width: 860px; margin: 0 auto; padding: 4px 16px 22px; font-size: 12px; color: #7a8499; }
+</style>
+</head>
+<body>
+<header>
+  <h1>QA Knowledge Platform</h1>
+  <p>Tanya jawab atas dokumen QA ParaBank dan Chaligula. Setiap jawaban menyebut sumbernya dan sitasinya diperiksa.</p>
+</header>
+<main>
+  <div id="chat"></div>
+  <form id="askbar">
+    <select id="project" title="Pilih project">
+      <option value="all">Semua Project</option>
+      <option value="parabank">ParaBank</option>
+      <option value="chaligula">Chaligula</option>
+    </select>
+    <input type="text" id="question" placeholder="Tulis pertanyaanmu, misalnya: bug apa yang terjadi saat login dengan password salah?" autocomplete="off">
+    <button type="submit" id="send">Tanya</button>
+  </form>
+
+  <details id="settings">
+    <summary>Pengaturan Model AI (bawa kunci sendiri / BYOK)</summary>
+    <div class="srow">
+      <label for="provider">Penyedia (provider)</label>
+      <select id="provider">
+        <option value="extractive">extractive (tanpa kunci, kutip dokumen)</option>
+        <option value="openai-compatible">openai-compatible (OpenAI, Groq, OpenRouter, LM Studio, dll.)</option>
+        <option value="gemini">gemini</option>
+        <option value="anthropic">anthropic</option>
+        <option value="ollama">ollama (lokal, tanpa kunci)</option>
+      </select>
+    </div>
+    <div class="srow">
+      <label for="base_url">Base URL (untuk openai-compatible dan ollama)</label>
+      <input type="text" id="base_url" placeholder="misalnya https://api.groq.com/openai/v1">
+    </div>
+    <div class="srow">
+      <label for="model">Nama model</label>
+      <input type="text" id="model" placeholder="misalnya llama-3.3-70b-versatile">
+    </div>
+    <div class="srow">
+      <label for="api_key">API key kamu sendiri (tidak pernah ditampilkan kembali)</label>
+      <input type="password" id="api_key" placeholder="Kosongkan jika tidak ingin mengubah kunci" autocomplete="off">
+    </div>
+    <div class="srow">
+      <button type="button" id="save-settings">Simpan Pengaturan</button>
+    </div>
+    <div id="settings-status">Memuat status pengaturan...</div>
+  </details>
+</main>
+<footer>Mode perorangan: tanpa login, semua project boleh diakses oleh pemiliknya. Versi perusahaan memakai login dan izin per project (lihat docs/DESIGN.md).</footer>
+
+<script>
+const chat = document.getElementById('chat');
+const NOT_FOUND_TEXT = 'The answer was not found in the documents.';
+
+function addMsg(text, cls) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + cls;
+  div.textContent = text;
+  chat.appendChild(div);
+  div.scrollIntoView({behavior: 'smooth', block: 'end'});
+  return div;
+}
+
+document.getElementById('askbar').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const q = document.getElementById('question').value.trim();
+  if (!q) return;
+  const project = document.getElementById('project').value;
+  const btn = document.getElementById('send');
+  addMsg(q, 'user');
+  document.getElementById('question').value = '';
+  btn.disabled = true;
+  const pending = addMsg('Mencari di dokumen...', 'bot');
+  try {
+    const resp = await fetch('/ask', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({question: q, project: project})
+    });
+    const data = await resp.json();
+    pending.textContent = data.answer;
+    if (data.answer === NOT_FOUND_TEXT || data.refused) {
+      pending.classList.add('notfound');
+      pending.textContent = data.answer + '\n\n(Tidak ditemukan di dokumen. Sistem menolak menjawab dari potongan yang relevansinya terlalu lemah.)';
+    } else if (data.sources && data.sources.length) {
+      const box = document.createElement('div');
+      box.className = 'sources';
+      const title = document.createElement('b');
+      title.textContent = 'Sumber:';
+      box.appendChild(title);
+      const ul = document.createElement('ul');
+      data.sources.forEach(s => {
+        const li = document.createElement('li');
+        li.textContent = '[' + s.project + ':' + s.doc_id + '] sheet: ' + (s.sheet || '-') + ', skor ' + s.score;
+        ul.appendChild(li);
+      });
+      box.appendChild(ul);
+      const note = document.createElement('div');
+      note.className = 'citecheck';
+      note.textContent = data.citations_valid
+        ? 'Sitasi jawaban ini sudah diperiksa dan cocok dengan sumber di atas. Penyedia: ' + data.provider
+        : 'Perhatian: sitasi jawaban ini tidak lolos pemeriksaan. Penyedia: ' + data.provider;
+      box.appendChild(note);
+      pending.appendChild(box);
+    }
+  } catch (err) {
+    pending.textContent = 'Terjadi kesalahan saat menghubungi server: ' + err;
+  }
+  btn.disabled = false;
+});
+
+async function loadSettings() {
+  const status = document.getElementById('settings-status');
+  try {
+    const resp = await fetch('/settings/llm');
+    const s = await resp.json();
+    document.getElementById('provider').value = s.provider || 'extractive';
+    document.getElementById('base_url').value = s.base_url || '';
+    document.getElementById('model').value = s.model || '';
+    // The API key field is never prefilled: the server never returns it.
+    document.getElementById('api_key').value = '';
+    status.textContent = 'Status sekarang: provider ' + s.provider +
+      ', model ' + (s.model || '(bawaan provider)') +
+      ', kunci ' + (s.key_set ? 'sudah terisi' : 'belum terisi') + '.';
+  } catch (err) {
+    status.textContent = 'Tidak bisa memuat status pengaturan: ' + err;
+  }
+}
+
+document.getElementById('save-settings').addEventListener('click', async () => {
+  const body = {
+    provider: document.getElementById('provider').value,
+    base_url: document.getElementById('base_url').value,
+    model: document.getElementById('model').value
+  };
+  const key = document.getElementById('api_key').value;
+  if (key) body.api_key = key;
+  const status = document.getElementById('settings-status');
+  try {
+    const resp = await fetch('/settings/llm', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    const s = await resp.json();
+    document.getElementById('api_key').value = '';
+    status.textContent = 'Tersimpan. Status sekarang: provider ' + s.provider +
+      ', model ' + (s.model || '(bawaan provider)') +
+      ', kunci ' + (s.key_set ? 'sudah terisi' : 'belum terisi') + '.';
+  } catch (err) {
+    status.textContent = 'Gagal menyimpan: ' + err;
+  }
+});
+
+loadSettings();
+addMsg('Halo. Silakan tanya soal test case, bug, atau dokumen QA dari ParaBank dan Chaligula. Kalau jawabannya tidak ada di dokumen, sistem akan bilang tidak ditemukan, bukan mengarang.', 'bot');
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+# Secrets and user settings
+.env
+.env.*
+!.env.example
+# Local LLM settings hold the user's own API key. Never commit.
+config/llm_settings.json
+config/
+
+# Python environments and caches
+.venv/
+.venv-streamlit/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.cache/
+
+# Local model caches (Hugging Face / sentence-transformers downloads)
+.hf/
+hf_cache/
+models/
+*.bin.tmp
+
+# OS and editor noise
+.DS_Store
+*.log

@@ -1,0 +1,15 @@
+.venv/
+.cache/
+.hf/
+.git/
+__pycache__/
+.pytest_cache/
+config/
+.env
+reports/
+tests/
+eval/
+docs/
+*.md
+Dockerfile
+.dockerignore
